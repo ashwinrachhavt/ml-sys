@@ -1,10 +1,8 @@
 """Synthetic fallback datasets for tests and CI runs."""
+
 from __future__ import annotations
 
-from typing import Tuple
-
 import pandas as pd
-
 
 CUSTOMER_ROWS = [
     {
@@ -105,7 +103,7 @@ USAGE_ROWS = [
 ]
 
 
-def load_stub_tables() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def load_stub_tables() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Return synthetic customer, noncustomer and usage tables."""
 
     customers = pd.DataFrame(CUSTOMER_ROWS)

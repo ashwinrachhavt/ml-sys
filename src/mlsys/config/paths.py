@@ -1,4 +1,5 @@
 """Centralised project paths for training and inference artifacts."""
+
 from pathlib import Path
 
 # Root of the repository (assume this file lives under src/mlsys/config/)

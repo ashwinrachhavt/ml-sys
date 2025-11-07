@@ -1,9 +1,8 @@
 """Streamlit UI for live evaluation of the lead-scoring model."""
+
 from __future__ import annotations
 
 import json
-from pathlib import Path
-from typing import List
 
 import pandas as pd
 import requests
@@ -14,7 +13,7 @@ from mlsys.training.pipeline import build_feature_matrix
 DEFAULT_API_URL = "http://localhost:8000"
 
 
-def _format_probabilities(probs: List[float]) -> pd.DataFrame:
+def _format_probabilities(probs: list[float]) -> pd.DataFrame:
     df = pd.DataFrame({"lead": range(1, len(probs) + 1), "probability": probs})
     df["rank"] = df["probability"].rank(ascending=False, method="first").astype(int)
     return df.sort_values("probability", ascending=False)
@@ -30,8 +29,8 @@ def main() -> None:
     st.sidebar.markdown("---")
     st.sidebar.header("Sample Data")
     if st.sidebar.button("Load training sample"):
-        X, _ = build_feature_matrix()
-        st.session_state["uploaded_df"] = X.head(50).reset_index(drop=True)
+        sample_features, _ = build_feature_matrix()
+        st.session_state["uploaded_df"] = sample_features.head(50).reset_index(drop=True)
 
     uploaded_file = st.file_uploader("Upload CSV of leads", type=["csv"])
 
