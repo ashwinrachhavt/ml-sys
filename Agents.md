@@ -226,7 +226,7 @@ ml-sys/
 └── pyproject.toml / setup.py   # (optional) if we make this an installable package
 
 
-This layout separates different aspects of the ML system. The src/ directory can be made an installable package (e.g., via pip install -e . for local development), which would allow us to use imports like from ml_sys.data.loader import load_data. While we may not publish it, structuring as a package enforces good organization. Notably:
+This layout separates different aspects of the ML system. The src/ directory can be made an installable package (e.g., via uv pip install -e . or more commonly uv sync for local development), which would allow us to use imports like from ml_sys.data.loader import load_data. While we may not publish it, structuring as a package enforces good organization. Notably:
 
 Data modules handle raw data ingestion and basic transforms. They do not contain model code.
 
@@ -301,17 +301,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v1
         with:
           python-version: '3.10'
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: uv sync --dev
       - name: Lint with Ruff
-        run: ruff .          # Lint the entire codebase:contentReference[oaicite:34]{index=34}
+        run: uv run ruff .          # Lint the entire codebase:contentReference[oaicite:34]{index=34}
       - name: Check import order
-        run: isort --check .
+        run: uv run isort --check .
       - name: Run Unit Tests
-        run: pytest -q
+        run: uv run pytest -q
 
 
 Each step must succeed for the code to be considered mergeable. We also include badges in the README (e.g., build status) to show the CI pipeline status, signaling to the team that quality checks are in place.
@@ -360,7 +360,7 @@ Data Description: Summarizes the dataset and features (drawing from the data dic
 
 How to Install & Run: Step-by-step instructions to get the code running:
 
-Installation: e.g., "Clone this repo, create a Python 3.10 virtual environment, and pip install -r requirements.txt." If using Docker for reproducibility, we could provide a Dockerfile to build an image containing the environment.
+Installation: e.g., "Clone this repo, create a Python 3.10 virtual environment, and run uv sync --dev." If using Docker for reproducibility, we could provide a Dockerfile to build an image containing the environment.
 
 Training the Model: e.g., "To train the model on the provided data, run python scripts/train.py --config configs/config.yaml. This will output a trained model file in models/ and print evaluation metrics." We mention any prerequisites (like ensure data CSVs are in a certain folder if not included in repo).
 
@@ -433,3 +433,4 @@ GitHub Actions Docs – using Ruff in CI for linting
 docs.github.com
 
 Reddit MLOps discussion – model versioning best practices (semantic versioning, artifact registry)
+

@@ -1,0 +1,18 @@
+Metadata-Version: 2.4
+Name: mlsys
+Version: 0.1.0
+Summary: Lead scoring ML system
+Author: Ashwin
+Requires-Python: >=3.11
+Requires-Dist: pandas
+Requires-Dist: scikit-learn
+Requires-Dist: xgboost
+Requires-Dist: fastapi
+Requires-Dist: uvicorn
+Requires-Dist: pydantic
+Requires-Dist: joblib
+Provides-Extra: ui
+Requires-Dist: streamlit; extra == "ui"
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: httpx; extra == "dev"

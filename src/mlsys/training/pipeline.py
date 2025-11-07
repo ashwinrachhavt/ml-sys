@@ -122,10 +122,19 @@ def build_feature_matrix(data_dir: Path | None = None) -> Tuple[pd.DataFrame, pd
     return X, y
 
 
+def _infer_categorical_features(X: pd.DataFrame) -> list[str]:
+    """Return columns that should be treated as categorical inputs."""
+
+    categorical_cols: list[str] = []
+    for col in X.columns:
+        dtype = X[col].dtype
+        if pd.api.types.is_object_dtype(dtype) or pd.api.types.is_categorical_dtype(dtype):
+            categorical_cols.append(col)
+    return categorical_cols
+
+
 def build_model(X: pd.DataFrame, y: pd.Series) -> Pipeline:
-    categorical_features = [
-        col for col in ["EMPLOYEE_RANGE", "INDUSTRY"] if col in X.columns
-    ]
+    categorical_features = _infer_categorical_features(X)
     numeric_features = [col for col in X.columns if col not in categorical_features]
 
     preprocess = ColumnTransformer(

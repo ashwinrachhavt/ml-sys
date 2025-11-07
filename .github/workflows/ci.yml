@@ -14,27 +14,26 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v1
         with:
           python-version: '3.11'
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -e .[dev,ui]
+          uv sync --dev --extra ui
 
       - name: Run training smoke test
         env:
           PYTHONPATH: src
         run: |
-          python -m mlsys.training.cli --test-size 0.3 --random-state 123 --output artifacts/ci_model.joblib
+          uv run python -m mlsys.training.cli --test-size 0.3 --random-state 123 --output artifacts/ci_model.joblib
 
       - name: Run pytest
         env:
           PYTHONPATH: src
         run: |
-          pytest
+          uv run pytest
 
       - name: Upload model artifact
         if: always()
