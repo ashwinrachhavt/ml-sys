@@ -6,11 +6,9 @@ import numpy as np
 from mlsys.training import pipeline
 from mlsys.training.model import CalibratedPipelineModel
 
-DATA_DIR = Path("data")
-
 
 def test_build_feature_matrix_shapes():
-    X, y = pipeline.build_feature_matrix(data_dir=DATA_DIR)
+    X, y = pipeline.build_feature_matrix()
     assert len(X) == len(y)
     assert "ALEXA_RANK_LOG1P" in X.columns
     usage_cols = [col for col in X.columns if col.startswith("ACTIONS_") or col.startswith("USERS_")]
@@ -24,7 +22,7 @@ def test_train_and_evaluate_smoke(tmp_path: Path):
         test_size=0.3,
         calibration_size=0.0,
         random_state=123,
-        data_dir=DATA_DIR,
+        data_dir=None,
         output_model_path=model_path,
     )
 

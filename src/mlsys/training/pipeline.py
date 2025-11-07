@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Tuple
+import warnings
 
 import joblib
 import numpy as np
@@ -21,6 +22,7 @@ from xgboost import XGBClassifier
 
 from mlsys.config.paths import DATA_DIR, MODEL_PATH
 from mlsys.training.model import CalibratedPipelineModel
+from mlsys.training.stub_data import load_stub_tables
 
 
 @dataclass
@@ -36,11 +38,23 @@ class TrainingResult:
 USAGE_PREFIXES = ("ACTIONS_", "USERS_")
 
 
-def _load_raw_tables(data_dir: Path) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    customers = pd.read_csv(data_dir / "customers.csv")
-    noncustomers = pd.read_csv(data_dir / "noncustomers.csv")
-    usage = pd.read_csv(data_dir / "usage_actions.csv")
-    return customers, noncustomers, usage
+def _load_raw_tables(data_dir: Path | None) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Read raw CSV tables, falling back to synthetic stubs if missing."""
+
+    if data_dir is not None:
+        try:
+            customers = pd.read_csv(data_dir / "customers.csv")
+            noncustomers = pd.read_csv(data_dir / "noncustomers.csv")
+            usage = pd.read_csv(data_dir / "usage_actions.csv")
+            return customers, noncustomers, usage
+        except FileNotFoundError:
+            warnings.warn(
+                "Raw CSV files were not found in the provided data directory; "
+                "using synthetic stub data instead.",
+                stacklevel=2,
+            )
+
+    return load_stub_tables()
 
 
 def _merge_datasets(customers: pd.DataFrame, noncustomers: pd.DataFrame, usage: pd.DataFrame) -> pd.DataFrame:
@@ -95,8 +109,12 @@ def _merge_datasets(customers: pd.DataFrame, noncustomers: pd.DataFrame, usage: 
 def build_feature_matrix(data_dir: Path | None = None) -> Tuple[pd.DataFrame, pd.Series]:
     """Load raw CSVs and produce feature matrix (X) and target (y)."""
 
-    data_dir = data_dir or DATA_DIR
-    customers, noncustomers, usage = _load_raw_tables(data_dir)
+    resolved_dir = data_dir or DATA_DIR
+    lookup_dir = resolved_dir
+    if data_dir is None and not resolved_dir.exists():
+        lookup_dir = None
+
+    customers, noncustomers, usage = _load_raw_tables(lookup_dir)
     merged = _merge_datasets(customers, noncustomers, usage)
 
     y = merged.pop("is_customer")
