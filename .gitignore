@@ -82,5 +82,5 @@ prometheus-data/
 *.tmp
 .cache/
 
-data/
-models/
+data
+models
