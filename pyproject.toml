@@ -71,12 +71,12 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["mlsys"]
+known-first-party = ["mlsys", "app"]
 
 [tool.isort]
 profile = "black"
 line_length = 120
-known_first_party = ["mlsys"]
+known_first_party = ["mlsys", "app"]
 skip_gitignore = true
 
 [tool.pytest.ini_options]

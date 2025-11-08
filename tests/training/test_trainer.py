@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import pandas as pd
 import pytest
-from app.data.base_loader import BaseDataLoader
-from app.features.pipeline import FeatureMatrix, FeaturePipeline
-from app.ml.trainer import ModelSpec, TrainingPipeline
 from sklearn.datasets import make_classification
 from sklearn.dummy import DummyClassifier
 from sklearn.linear_model import LogisticRegression
+
+from app.data.base_loader import BaseDataLoader
+from app.features.pipeline import FeatureMatrix, FeaturePipeline
+from app.ml.trainer import ModelSpec, TrainingPipeline
 
 
 class StubLoader(BaseDataLoader):

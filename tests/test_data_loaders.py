@@ -6,6 +6,7 @@ from typing import Any
 import pandas as pd
 import pytest
 import yaml  # type: ignore[import-untyped]
+
 from app.data.dataframe_loader import DataFrameLoader
 
 
