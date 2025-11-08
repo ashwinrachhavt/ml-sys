@@ -21,6 +21,8 @@ data:
   customers_file: "data/raw/customers.csv"
   noncustomers_file: "data/raw/noncustomers.csv"
   usage_file: "data/raw/usage_actions.csv"
+  id_column: "id"
+  target_column: "converted"
 
   # Validation rules
   validation:
@@ -31,6 +33,7 @@ data:
 
 # Feature Engineering
 features:
+  reference_date: "2025-11-08"
   categorical:
     - EMPLOYEE_RANGE
     - INDUSTRY
