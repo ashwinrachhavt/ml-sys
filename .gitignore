@@ -45,9 +45,6 @@ htmlcov/
 *~
 .DS_Store
 
-# Jupyter
-.ipynb_checkpoints/
-*.ipynb
 
 # MLflow
 mlruns/
@@ -82,5 +79,5 @@ prometheus-data/
 *.tmp
 .cache/
 
-data/
-models/
+data
+models
