@@ -83,3 +83,4 @@ dataset
 catboost_info/
 
 mlflow
+config/models
