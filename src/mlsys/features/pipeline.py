@@ -152,12 +152,27 @@ class FeaturePipeline:
         if usage is None or id_column not in usage.columns:
             return base
 
-        numeric_columns = usage.select_dtypes(include=["number"]).columns.tolist()
+        # Drop duplicate columns first to avoid selecting a 2D grouper
+        usage_clean = usage.loc[:, ~usage.columns.duplicated()].copy()
+        if id_column not in usage_clean.columns:
+            return base
+
+        numeric_columns = usage_clean.select_dtypes(include=["number"]).columns.tolist()
+        # Ensure the id column isn't included in numeric aggregation list
+        numeric_columns = [c for c in numeric_columns if c != id_column]
         if not numeric_columns:
             return base
 
-        grouped = usage.loc[:, [id_column] + numeric_columns].groupby(id_column, as_index=False).sum()
-        return base.merge(grouped, on=id_column, how="left")
+        # Build a clean subset with exactly one id column plus numeric cols
+        subset = usage_clean[[id_column] + numeric_columns]
+        # Group by the Series explicitly to guarantee 1-D grouping key
+        grouped = subset.groupby(subset[id_column], as_index=False).sum()
+
+        merged = base.merge(grouped, on=id_column, how="left", suffixes=("", "_usage"))
+        # Drop any duplicate column names that could still sneak in
+        if merged.columns.duplicated().any():
+            merged = merged.loc[:, ~merged.columns.duplicated()]
+        return merged
 
     def _fill_numeric_gaps(self, df: pd.DataFrame) -> pd.DataFrame:
         """Ensure numeric columns have zero-filled missing values."""
