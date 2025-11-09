@@ -7,12 +7,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import mlflow  # type: ignore[import]
-import mlflow.sklearn  # type: ignore[attr-defined]
 import numpy as np
 import pandas as pd
 from imblearn.over_sampling import SMOTE  # type: ignore[import]
-from mlflow.tracking import MlflowClient  # type: ignore[attr-defined]
+
+try:
+    import mlflow  # type: ignore[import]
+    import mlflow.sklearn  # type: ignore[attr-defined]
+    from mlflow.tracking import MlflowClient  # type: ignore[attr-defined]
+except ImportError as exc:  # pragma: no cover
+    raise ImportError("mlflow is required for training. Install it with `pip install mlflow`.") from exc
 from sklearn.base import ClassifierMixin
 from sklearn.model_selection import GridSearchCV
 

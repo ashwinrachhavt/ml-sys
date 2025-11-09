@@ -8,12 +8,16 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import mlflow  # type: ignore[import]
-import mlflow.sklearn  # type: ignore[attr-defined]
 import numpy as np
 import pandas as pd
-from mlflow import artifacts as mlflow_artifacts  # type: ignore[attr-defined]
-from mlflow.tracking import MlflowClient  # type: ignore[attr-defined]
+
+try:
+    import mlflow  # type: ignore[import]
+    import mlflow.sklearn  # type: ignore[attr-defined]
+    from mlflow import artifacts as mlflow_artifacts  # type: ignore[attr-defined]
+    from mlflow.tracking import MlflowClient  # type: ignore[attr-defined]
+except ImportError as exc:  # pragma: no cover
+    raise ImportError("mlflow is required for serving. Install it with `pip install mlflow`.") from exc
 
 from app.core.config import load_config
 from app.features.pipeline import FeatureMetadata
