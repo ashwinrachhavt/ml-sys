@@ -4,11 +4,11 @@ import time
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 from prometheus_client import Counter, Histogram
 
 from app.api.deps import get_predictor
-from app.schemas.inference import InferencePayload, PredictionResponse
+from app.schemas.inference import _INFERENCE_EXAMPLE, InferencePayload, PredictionResponse
 from app.schemas.model import ModelInfo
 from app.serving.predictor import ModelPredictor
 
@@ -34,7 +34,10 @@ def _build_model_info(predictor: ModelPredictor) -> ModelInfo:
 
 @router.post("/predict", response_model=PredictionResponse)
 def predict(
-    payload: InferencePayload,
+    payload: Annotated[
+        InferencePayload,
+        Body(..., example=_INFERENCE_EXAMPLE),
+    ],
     predictor: Annotated[ModelPredictor, Depends(get_predictor)],
 ) -> PredictionResponse:
     start = time.perf_counter()

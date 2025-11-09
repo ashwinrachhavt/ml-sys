@@ -61,7 +61,8 @@ def main() -> None:
     predictor = predictor_cls(config_path=config_path)
     model = predictor.model
     if model is None:
-        raise RuntimeError("Model could not be loaded from MLflow registry")
+        print("No production model is registered yet. Train and register a model before running evaluation.")
+        return
 
     x_test = matrix.x_test
     y_test = matrix.y_test

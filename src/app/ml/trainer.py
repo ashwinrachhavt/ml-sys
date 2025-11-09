@@ -10,15 +10,12 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pandas as pd
 from imblearn.over_sampling import SMOTE  # type: ignore[import]
-
-try:
-    import mlflow  # type: ignore[import]
-    import mlflow.sklearn  # type: ignore[attr-defined]
-    from mlflow.tracking import MlflowClient  # type: ignore[attr-defined]
-except ImportError as exc:  # pragma: no cover
-    raise ImportError("mlflow is required for training. Install it with `pip install mlflow`.") from exc
 from sklearn.base import ClassifierMixin
 from sklearn.model_selection import GridSearchCV
+
+import mlflow  # type: ignore[import]
+import mlflow.sklearn  # type: ignore[attr-defined]
+from mlflow.tracking import MlflowClient  # type: ignore[attr-defined]
 
 if TYPE_CHECKING:  # pragma: no cover - for type checkers only
     import mlflow  # noqa: F401

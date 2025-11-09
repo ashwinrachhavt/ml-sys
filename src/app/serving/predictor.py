@@ -11,16 +11,13 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pandas as pd
 
-try:
-    import mlflow  # type: ignore[import]
-    import mlflow.sklearn  # type: ignore[attr-defined]
-    from mlflow import artifacts as mlflow_artifacts  # type: ignore[attr-defined]
-    from mlflow.tracking import MlflowClient  # type: ignore[attr-defined]
-except ImportError as exc:  # pragma: no cover
-    raise ImportError("mlflow is required for serving. Install it with `pip install mlflow`.") from exc
-
+import mlflow  # type: ignore[import]
+import mlflow.sklearn  # type: ignore[attr-defined]
 from app.core.config import load_config
 from app.features.pipeline import FeatureMetadata
+from mlflow import artifacts as mlflow_artifacts  # type: ignore[attr-defined]
+from mlflow.exceptions import MlflowException  # type: ignore[attr-defined]
+from mlflow.tracking import MlflowClient  # type: ignore[attr-defined]
 
 if TYPE_CHECKING:  # pragma: no cover - assists static analysis
     import mlflow  # noqa: F401
@@ -114,14 +111,29 @@ class ModelPredictor:
         mlflow.set_tracking_uri(self.tracking_uri)  # type: ignore[attr-defined]
         client = MlflowClient()
 
-        latest_versions = client.get_latest_versions(self.model_name, [self.model_stage])
-        if not latest_versions:
-            raise RuntimeError(f"No model version found for {self.model_name} in stage {self.model_stage}")
+        try:
+            latest_versions = client.get_latest_versions(self.model_name, [self.model_stage])
+        except MlflowException:
+            latest_versions = []
 
-        model_version = latest_versions[0]
+        model_version = None
+        if latest_versions:
+            model_version = latest_versions[0]
+        else:
+            fallback = client.search_model_versions(f"name='{self.model_name}'")
+            if fallback:
+                model_version = max(fallback, key=lambda mv: getattr(mv, "version", "0"))
+
+        if model_version is None:
+            logging.warning(
+                "No model version available for %s. Train and register a model first.",
+                self.model_name,
+            )
+            return
+
         self._model_version = model_version.version
 
-        model_uri = f"models:/{self.model_name}/{self.model_stage}"
+        model_uri = f"runs:/{model_version.run_id}/model"
         logging.info("Loading model from %s", model_uri)
         self._model = mlflow.sklearn.load_model(model_uri)  # type: ignore[attr-defined]
 
