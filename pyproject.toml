@@ -21,6 +21,7 @@ dependencies = [
     "prometheus-client>=0.19.0",
     "mlflow>=2.9.0",
     "python-dotenv>=1.0.0",
+    "PyYAML>=6.0.0",
 ]
 
 [project.optional-dependencies]
@@ -70,12 +71,12 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["mlsys"]
+known-first-party = ["mlsys", "app"]
 
 [tool.isort]
 profile = "black"
 line_length = 120
-known_first_party = ["mlsys"]
+known_first_party = ["mlsys", "app"]
 skip_gitignore = true
 
 [tool.pytest.ini_options]

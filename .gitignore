@@ -79,6 +79,6 @@ prometheus-data/
 *.tmp
 .cache/
 
-data
+dataset
 models
 catboost_info/
