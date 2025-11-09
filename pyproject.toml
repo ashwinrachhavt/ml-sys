@@ -54,6 +54,7 @@ exclude = [
     "build",
     "dist",
     "notebooks",
+    "src/app",
 ]
 
 [tool.ruff.lint]
