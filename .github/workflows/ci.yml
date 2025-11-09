@@ -25,11 +25,11 @@ jobs:
 
       - name: Ruff lint
         run: |
-          uv run ruff check src tests
+          uv run ruff check src tests scripts
 
       - name: Ruff format check
         run: |
-          uv run ruff format --check src tests
+          uv run ruff format --check src tests scripts
 
       - name: Run targeted pytest suite
         env:

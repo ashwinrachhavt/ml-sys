@@ -5,10 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, cast
 
-import pandas as pd
-
 import mlflow
 import mlflow.pyfunc
+import pandas as pd
 
 
 @dataclass

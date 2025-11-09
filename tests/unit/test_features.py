@@ -1,7 +1,7 @@
 import pandas as pd
+from tests.fixtures.sample_data import make_customer_data, make_usage_data
 
 from mlsys.features import FeaturePipeline, TransformerRegistry
-from tests.fixtures.sample_data import make_customer_data, make_usage_data
 
 
 def test_feature_pipeline_combines_datasets() -> None:
