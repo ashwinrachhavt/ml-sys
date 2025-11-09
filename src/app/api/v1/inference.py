@@ -26,7 +26,7 @@ def _build_model_info(predictor: ModelPredictor) -> ModelInfo:
         model_version=predictor.model_version,
         model_stage=predictor.model_stage,
         features=features,
-        last_trained=datetime.utcnow().isoformat() if metadata else None,  # placeholder
+        last_trained=datetime.utcnow().isoformat() if metadata else None,
         metrics=predictor.metrics,
         threshold=predictor.best_threshold,
     )

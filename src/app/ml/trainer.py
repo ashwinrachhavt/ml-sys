@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -8,19 +9,16 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
-
-try:  # pragma: no cover - optional dependency
-    from imblearn.over_sampling import SMOTE
-except ImportError:  # pragma: no cover
-    SMOTE = None  # type: ignore[assignment]
-from sklearn.base import ClassifierMixin
-from sklearn.model_selection import GridSearchCV
+from imblearn.over_sampling import SMOTE  # type: ignore[import]
 
 try:
-    import mlflow
+    import mlflow  # type: ignore[import]
     import mlflow.sklearn  # type: ignore[attr-defined]
-except ImportError:  # pragma: no cover - fallback when mlflow is optional
-    mlflow = None  # type: ignore[assignment]
+    from mlflow.tracking import MlflowClient  # type: ignore[attr-defined]
+except ImportError as exc:  # pragma: no cover
+    raise ImportError("mlflow is required for training. Install it with `pip install mlflow`.") from exc
+from sklearn.base import ClassifierMixin
+from sklearn.model_selection import GridSearchCV
 
 if TYPE_CHECKING:  # pragma: no cover - for type checkers only
     import mlflow  # noqa: F401
@@ -39,6 +37,13 @@ class ModelSpec:
 
 
 @dataclass
+class ModelComparison:
+    name: str
+    cv_score: float
+    best_params: Mapping[str, Any]
+
+
+@dataclass
 class TrainingResult:
     best_model_name: str
     best_estimator: ClassifierMixin
@@ -48,6 +53,7 @@ class TrainingResult:
     best_threshold: float | None
     feature_importance: pd.DataFrame | None
     metadata: FeatureMetadata
+    comparisons: list[ModelComparison]
 
 
 class TrainingPipeline:
@@ -76,12 +82,11 @@ class TrainingPipeline:
 
         mlflow_run = None
         if self.enable_mlflow:
-            if mlflow is None:
-                raise RuntimeError("MLflow is not installed but enable_mlflow=True")
-
             experiment = cfg.get("mlflow", {}).get("experiment_name", "default")
-            mlflow.set_experiment(experiment)
-            mlflow_run = mlflow.start_run(run_name=cfg.get("mlflow", {}).get("run_name_prefix", "training"))
+            mlflow.set_experiment(experiment)  # type: ignore[attr-defined]
+            mlflow_run = mlflow.start_run(  # type: ignore[attr-defined]
+                run_name=cfg.get("mlflow", {}).get("run_name_prefix", "training")
+            )
 
         try:
             datasets = self.loader.load(config=cfg, config_path=config_path)
@@ -89,7 +94,7 @@ class TrainingPipeline:
 
             x_fit, y_fit = self._prepare_training_inputs(cfg, feature_matrix)
 
-            best_spec, grid_search = self._train_models(cfg, feature_matrix, x_fit, y_fit)
+            best_spec, grid_search, comparisons = self._train_models(cfg, x_fit, y_fit)
 
             estimator: ClassifierMixin = grid_search.best_estimator_
             metrics = self._collect_metrics(cfg, estimator, feature_matrix)
@@ -98,6 +103,9 @@ class TrainingPipeline:
             feature_importance = self._extract_feature_importance(estimator, feature_matrix.feature_names)
 
             if mlflow_run is not None:
+                registry_cfg = cfg.get("mlflow", {}).get("registry", {})
+                serving_cfg = cfg.get("api", {}).get("serving", {})
+                target_stage = serving_cfg.get("model_stage")
                 self._log_mlflow(
                     best_spec,
                     grid_search,
@@ -105,6 +113,8 @@ class TrainingPipeline:
                     feature_matrix,
                     best_threshold,
                     feature_importance,
+                    registry_cfg=registry_cfg,
+                    target_stage=target_stage,
                 )
 
             return TrainingResult(
@@ -116,18 +126,18 @@ class TrainingPipeline:
                 best_threshold=best_threshold,
                 feature_importance=feature_importance,
                 metadata=feature_matrix.metadata,
+                comparisons=comparisons,
             )
         finally:
             if mlflow_run is not None:
-                mlflow.end_run()
+                mlflow.end_run()  # type: ignore[attr-defined]
 
     def _train_models(
         self,
         cfg: Mapping[str, Any],
-        feature_matrix: FeatureMatrix,
         x_train_fit: pd.DataFrame,
         y_train_fit: pd.Series,
-    ) -> tuple[ModelSpec, GridSearchCV]:
+    ) -> tuple[ModelSpec, GridSearchCV, list[ModelComparison]]:
         evaluation_cfg = cfg.get("evaluation", {})
         primary_metric = evaluation_cfg.get("primary_metric", "roc_auc")
         cv_folds = cfg.get("training", {}).get("cv_folds", 5)
@@ -135,6 +145,7 @@ class TrainingPipeline:
         best_spec: ModelSpec | None = None
         best_grid: GridSearchCV | None = None
         best_score = -np.inf
+        comparisons: list[ModelComparison] = []
 
         for spec in self.model_specs:
             estimator = spec.estimator
@@ -149,6 +160,14 @@ class TrainingPipeline:
             grid.fit(x_train_fit, y_train_fit)
 
             mean_score = grid.best_score_
+            comparisons.append(
+                ModelComparison(
+                    name=spec.name,
+                    cv_score=float(mean_score),
+                    best_params=dict(grid.best_params_),
+                )
+            )
+
             if mean_score > best_score:
                 best_score = mean_score
                 best_spec = spec
@@ -157,7 +176,8 @@ class TrainingPipeline:
         if best_spec is None or best_grid is None:
             raise RuntimeError("Training failed to produce a model")
 
-        return best_spec, best_grid
+        comparisons.sort(key=lambda item: item.cv_score, reverse=True)
+        return best_spec, best_grid, comparisons
 
     def _log_mlflow(
         self,
@@ -167,28 +187,60 @@ class TrainingPipeline:
         feature_matrix: FeatureMatrix,
         best_threshold: float | None,
         feature_importance: pd.DataFrame | None,
+        *,
+        registry_cfg: Mapping[str, Any],
+        target_stage: str | None,
     ) -> None:
-        if mlflow is None:
-            return
-
-        mlflow.log_params({f"{spec.name}_{k}": v for k, v in grid.best_params_.items()})
-        mlflow.log_metrics({k: float(v) for k, v in metrics.items() if isinstance(v, int | float)})
-        mlflow.log_text("\n".join(feature_matrix.feature_names), artifact_file="feature_names.txt")
-        mlflow.log_text(
+        mlflow.log_params({f"{spec.name}_{k}": v for k, v in grid.best_params_.items()})  # type: ignore[attr-defined]
+        mlflow.log_metrics({k: float(v) for k, v in metrics.items() if isinstance(v, int | float)})  # type: ignore[attr-defined]
+        mlflow.log_text("\n".join(feature_matrix.feature_names), artifact_file="feature_names.txt")  # type: ignore[attr-defined]
+        mlflow.log_text(  # type: ignore[attr-defined]
             json.dumps(feature_matrix.metadata.to_dict()),
             artifact_file="feature_metadata.json",
         )
         if best_threshold is not None:
-            mlflow.log_param("best_threshold", best_threshold)
+            mlflow.log_param("best_threshold", best_threshold)  # type: ignore[attr-defined]
 
         if feature_importance is not None:
             from io import StringIO
 
             buffer = StringIO()
             feature_importance.to_csv(buffer, index=False)
-            mlflow.log_text(buffer.getvalue(), artifact_file="feature_importance.csv")
+            mlflow.log_text(buffer.getvalue(), artifact_file="feature_importance.csv")  # type: ignore[attr-defined]
 
-        mlflow.sklearn.log_model(grid.best_estimator_, artifact_path="model")
+        mlflow.sklearn.log_model(grid.best_estimator_, artifact_path="model")  # type: ignore[attr-defined]
+
+        model_name = registry_cfg.get("model_name")
+        if not model_name:
+            return
+
+        active_run = mlflow.active_run()  # type: ignore[attr-defined]
+        if active_run is None or MlflowClient is None:
+            return
+
+        run_id = active_run.info.run_id
+        model_uri = f"runs:/{run_id}/model"
+        client = MlflowClient()
+
+        try:
+            registered = mlflow.register_model(model_uri, model_name)  # type: ignore[attr-defined]
+            version = registered.version
+        except Exception:  # pragma: no cover - fallback for existing registrations
+            registered = client.create_model_version(model_name, model_uri, run_id)
+            version = registered.version
+
+        if target_stage:
+            try:
+                client.transition_model_version_stage(
+                    name=model_name,
+                    version=version,
+                    stage=target_stage,
+                    archive_existing_versions=True,
+                )
+            except Exception:  # pragma: no cover - log but continue
+                logging.warning(
+                    "Unable to transition model %s version %s to stage %s", model_name, version, target_stage
+                )
 
     def _prepare_training_inputs(
         self,

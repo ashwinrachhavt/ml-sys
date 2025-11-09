@@ -6,23 +6,24 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
 
+try:
+    import mlflow  # type: ignore[import]
+    import mlflow.sklearn  # type: ignore[attr-defined]
+    from mlflow import artifacts as mlflow_artifacts  # type: ignore[attr-defined]
+    from mlflow.tracking import MlflowClient  # type: ignore[attr-defined]
+except ImportError as exc:  # pragma: no cover
+    raise ImportError("mlflow is required for serving. Install it with `pip install mlflow`.") from exc
+
 from app.core.config import load_config
 from app.features.pipeline import FeatureMetadata
 
-try:  # pragma: no cover - optional dependency handling
-    import mlflow
-    import mlflow.sklearn
-    from mlflow import artifacts as mlflow_artifacts
-    from mlflow.tracking import MlflowClient
-except ImportError:  # pragma: no cover
-    mlflow = None  # type: ignore[assignment]
-    mlflow_artifacts = None  # type: ignore[assignment]
-    MlflowClient = None  # type: ignore[assignment]
+if TYPE_CHECKING:  # pragma: no cover - assists static analysis
+    import mlflow  # noqa: F401
 
 
 @dataclass
@@ -43,7 +44,6 @@ class FeatureAligner:
     def transform(self, payload: Mapping[str, Any]) -> pd.DataFrame:
         frame = pd.DataFrame([payload])
 
-        # basic type coercion for datetimes
         reference_date = self.metadata.reference_date
         reference = datetime.fromisoformat(reference_date) if reference_date else None
 
@@ -102,12 +102,16 @@ class ModelPredictor:
     def metrics(self) -> dict[str, float]:
         return self._metrics
 
+    @property
+    def model(self):  # type: ignore[override]
+        return self._model
+
     def _load_artifacts(self) -> None:
-        if mlflow is None or MlflowClient is None:
+        if MlflowClient is None:
             raise RuntimeError("mlflow must be installed to load model artifacts")
 
         logging.info("Setting MLflow tracking URI to %s", self.tracking_uri)
-        mlflow.set_tracking_uri(self.tracking_uri)
+        mlflow.set_tracking_uri(self.tracking_uri)  # type: ignore[attr-defined]
         client = MlflowClient()
 
         latest_versions = client.get_latest_versions(self.model_name, [self.model_stage])
@@ -119,7 +123,7 @@ class ModelPredictor:
 
         model_uri = f"models:/{self.model_name}/{self.model_stage}"
         logging.info("Loading model from %s", model_uri)
-        self._model = mlflow.sklearn.load_model(model_uri)
+        self._model = mlflow.sklearn.load_model(model_uri)  # type: ignore[attr-defined]
 
         run_id = model_version.run_id
 
