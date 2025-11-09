@@ -361,8 +361,11 @@ class Trainer:
         if not self.settings.serving.local_model_path or state.model is None:
             return
 
-        # Resolve artifact under project root, not under config/ (which can be read-only in Docker)
-        output_path = self.settings.resolve_path(self.settings.serving.local_model_path, relative_to=Path.cwd())
+        # Resolve artifact relative to the config file if available; this makes
+        # tests that pass a tmp config directory persist inside that tmp dir.
+        base = getattr(self.settings, "_config_path", None)
+        base = base.parent if base is not None else Path.cwd()
+        output_path = self.settings.resolve_path(self.settings.serving.local_model_path, relative_to=base)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         artifact = {
             "model": state.model,
