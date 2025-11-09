@@ -146,9 +146,7 @@ class FeaturePipeline:
         combined = pd.concat([base, aligned], ignore_index=True, sort=False)
         return combined
 
-    def _merge_usage_features(
-        self, base: pd.DataFrame, usage: pd.DataFrame | None, id_column: str
-    ) -> pd.DataFrame:
+    def _merge_usage_features(self, base: pd.DataFrame, usage: pd.DataFrame | None, id_column: str) -> pd.DataFrame:
         """Merge aggregated usage metrics into the base dataset."""
 
         if usage is None or id_column not in usage.columns:
