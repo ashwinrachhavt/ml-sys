@@ -7,7 +7,7 @@ from sklearn.dummy import DummyClassifier
 from sklearn.linear_model import LogisticRegression
 
 from app.data.base_loader import BaseDataLoader
-from app.features.pipeline import FeatureMatrix, FeaturePipeline
+from app.features.pipeline import FeatureMatrix, FeatureMetadata, FeaturePipeline
 from app.ml.trainer import ModelSpec, TrainingPipeline
 
 
@@ -35,20 +35,28 @@ class StubFeaturePipeline(FeaturePipeline):
 @pytest.fixture
 def feature_matrix() -> FeatureMatrix:
     x, y = make_classification(
-        n_samples=80,
+        n_samples=120,
         n_features=5,
         n_informative=3,
         random_state=42,
     )
-    x_train, x_val = x[:60], x[60:]
-    y_train, y_val = y[:60], y[60:]
+    x_train, x_val, x_test = x[:60], x[60:90], x[90:]
+    y_train, y_val, y_test = y[:60], y[60:90], y[90:]
 
     return FeatureMatrix(
         x_train=pd.DataFrame(x_train, columns=[f"f{i}" for i in range(5)]),
         x_val=pd.DataFrame(x_val, columns=[f"f{i}" for i in range(5)]),
+        x_test=pd.DataFrame(x_test, columns=[f"f{i}" for i in range(5)]),
         y_train=pd.Series(y_train),
         y_val=pd.Series(y_val),
+        y_test=pd.Series(y_test),
         feature_names=[f"f{i}" for i in range(5)],
+        metadata=FeatureMetadata(
+            feature_names=[f"f{i}" for i in range(5)],
+            categorical_features=[],
+            reference_date=None,
+            datetime_columns=[],
+        ),
     )
 
 
@@ -80,7 +88,14 @@ def trainer(feature_matrix: FeatureMatrix) -> TrainingPipeline:
 
 
 def test_training_pipeline_selects_best_model(trainer: TrainingPipeline) -> None:
-    result = trainer.run(config={"training": {"cv_folds": 3}, "evaluation": {"primary_metric": "roc_auc"}})
+    result = trainer.run(
+        config={
+            "training": {"cv_folds": 3},
+            "evaluation": {"primary_metric": "roc_auc", "threshold_metric": "f1"},
+        }
+    )
 
     assert result.best_model_name == "logistic_regression"
-    assert "roc_auc" in result.metrics
+    assert "val_roc_auc" in result.metrics
+    assert result.best_threshold is not None
+    assert result.metadata.feature_names == result.feature_names

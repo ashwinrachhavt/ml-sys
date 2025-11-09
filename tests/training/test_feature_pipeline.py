@@ -13,7 +13,7 @@ def config() -> dict:
     return {
         "data": {
             "id_column": "id",
-            "target_column": "converted",
+            "target_column": "is_customer",
         },
         "features": {
             "categorical": ["INDUSTRY"],
@@ -33,7 +33,6 @@ def datasets(tmp_path: Path) -> dict[str, pd.DataFrame]:
         {
             "id": [1, 2, 3, 4, 5],
             "INDUSTRY": ["TECH", "FIN", "TECH", "HEALTH", "FIN"],
-            "converted": [1, 0, 1, 0, 0],
         }
     )
     usage = pd.DataFrame(
@@ -51,9 +50,16 @@ def datasets(tmp_path: Path) -> dict[str, pd.DataFrame]:
             "ACTIONS_CRM_CONTACTS": [5, 7, 3, 1, 1, 2, 0],
         }
     )
+    noncustomers = pd.DataFrame(
+        {
+            "id": [6, 7, 8],
+            "INDUSTRY": ["TECH", "RETAIL", "FIN"],
+        }
+    )
 
     return {
         "customers": customers,
+        "noncustomers": noncustomers,
         "usage_actions": usage,
     }
 
@@ -65,14 +71,20 @@ def test_feature_pipeline_creates_expected_columns(config: dict, datasets: dict[
     assert not matrix.x_train.empty
     assert "INDUSTRY_FIN" in matrix.feature_names
     assert "days_since_last_action" in matrix.feature_names
+    assert set(matrix.y_train.unique()) <= {0, 1}
+    assert matrix.metadata.feature_names == matrix.feature_names
 
     # Ensure target remains aligned after train/val split
     assert matrix.x_train.shape[0] == matrix.y_train.shape[0]
     assert matrix.x_val.shape[0] == matrix.y_val.shape[0]
+    assert matrix.x_test.shape[0] == matrix.y_test.shape[0]
 
 
-def test_feature_pipeline_requires_target_column(config: dict, datasets: dict[str, pd.DataFrame]) -> None:
-    datasets["customers"] = datasets["customers"].drop(columns=["converted"])
+def test_feature_pipeline_requires_noncustomers_when_target_missing(
+    config: dict, datasets: dict[str, pd.DataFrame]
+) -> None:
+    datasets.pop("noncustomers")
+    config["data"]["target_column"] = "custom_target"
     pipeline = FeaturePipeline(config)
 
     with pytest.raises(KeyError):

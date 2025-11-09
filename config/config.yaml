@@ -18,11 +18,11 @@ paths:
 
 # Data Loading
 data:
-  customers_file: "data/raw/customers.csv"
-  noncustomers_file: "data/raw/noncustomers.csv"
-  usage_file: "data/raw/usage_actions.csv"
+  customers_file: "dataset/raw/customers.csv"
+  noncustomers_file: "dataset/raw/noncustomers.csv"
+  usage_file: "dataset/raw/usage_actions.csv"
   id_column: "id"
-  target_column: "converted"
+  target_column: "is_customer"
 
   # Validation rules
   validation:

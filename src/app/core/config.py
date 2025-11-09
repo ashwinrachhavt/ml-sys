@@ -6,7 +6,7 @@ from typing import Any, cast
 
 import yaml  # type: ignore[import-untyped]
 
-DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[2] / "config" / "config.yaml"
+DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[3] / "config" / "config.yaml"
 
 
 def load_config(config_path: Path | None = None) -> dict[str, Any]:
