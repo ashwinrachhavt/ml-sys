@@ -80,7 +80,6 @@ prometheus-data/
 .cache/
 
 dataset
-models
 catboost_info/
 
 mlflow
