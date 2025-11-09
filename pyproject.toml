@@ -43,8 +43,20 @@ dev = [
     "types-requests>=2.32.0",
 ]
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.setuptools]
+package-dir = {"" = "src"}
+packages = [
+    "mlsys",
+    "mlsys.api",
+    "mlsys.config",
+    "mlsys.data",
+    "mlsys.evaluation",
+    "mlsys.features",
+    "mlsys.models",
+    "mlsys.serving",
+    "mlsys.tracking",
+    "mlsys.training",
+]
 
 [tool.ruff]
 line-length = 120

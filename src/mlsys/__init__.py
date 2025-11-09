@@ -7,4 +7,6 @@ try:  # pragma: no cover - best effort metadata lookup
 except PackageNotFoundError:  # pragma: no cover - local development fallback
     __version__ = "0.0.0"
 
+from . import models  # noqa: F401
+
 __all__ = ["__version__"]
