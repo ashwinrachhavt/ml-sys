@@ -63,7 +63,8 @@ def main() -> None:
     local_path: Path | None = None
     if getattr(settings.serving, "local_model_path", None):
         try:
-            local_path = settings.resolve_path(settings.serving.local_model_path)  # type: ignore[attr-defined]
+            # Resolve under project root so Docker bind mounts can be used
+            local_path = settings.resolve_path(settings.serving.local_model_path, relative_to=Path.cwd())  # type: ignore[attr-defined]
         except Exception:
             local_path = Path(settings.serving.local_model_path)
 

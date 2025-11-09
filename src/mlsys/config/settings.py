@@ -181,9 +181,32 @@ class Settings(BaseSettings):
         return (base / raw).resolve()
 
     def data_paths(self, relative_to: Path | None = None) -> dict[str, Path]:
-        """Return fully resolved data source paths."""
+        """Return resolved data source paths, preferring project root.
 
-        return {name: self.resolve_path(path, relative_to) for name, path in self.data.sources.items()}
+        Resolution order per path:
+        1) relative to ``relative_to`` if provided
+        2) relative to current working directory (project root in Docker)
+        3) relative to the configuration file directory (backward-compatible)
+        """
+
+        resolved: dict[str, Path] = {}
+        for name, raw in self.data.sources.items():
+            candidate: Path | None = None
+            # 1) explicit base
+            if relative_to is not None:
+                cand = self.resolve_path(raw, relative_to)
+                if cand.exists():
+                    candidate = cand
+            # 2) project root
+            if candidate is None:
+                cand = self.resolve_path(raw, relative_to=Path.cwd())
+                if cand.exists():
+                    candidate = cand
+            # 3) config dir fallback
+            if candidate is None:
+                candidate = self.resolve_path(raw)
+            resolved[name] = candidate
+        return resolved
 
 
 __all__ = ["Settings"]

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import joblib
@@ -98,7 +99,8 @@ class PredictorService:
         local_path = self.settings.serving.local_model_path
         if not local_path:
             return None
-        path = self.settings.resolve_path(local_path)
+        # Resolve under project root to work with Docker bind mounts
+        path = self.settings.resolve_path(local_path, relative_to=Path.cwd())
         if not path.exists():
             return None
         artifact = joblib.load(path)

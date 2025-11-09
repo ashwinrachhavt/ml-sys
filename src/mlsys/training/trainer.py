@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import joblib
@@ -360,7 +361,8 @@ class Trainer:
         if not self.settings.serving.local_model_path or state.model is None:
             return
 
-        output_path = self.settings.resolve_path(self.settings.serving.local_model_path)
+        # Resolve artifact under project root, not under config/ (which can be read-only in Docker)
+        output_path = self.settings.resolve_path(self.settings.serving.local_model_path, relative_to=Path.cwd())
         output_path.parent.mkdir(parents=True, exist_ok=True)
         artifact = {
             "model": state.model,
@@ -370,6 +372,7 @@ class Trainer:
             "target_column": self.settings.data.target_column,
         }
         joblib.dump(artifact, output_path)
+        print(f"Saved best model artifact to {output_path}")
 
 
 __all__ = ["Trainer", "TrainingResult", "ModelComparison"]

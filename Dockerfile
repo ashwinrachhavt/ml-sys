@@ -19,6 +19,9 @@ COPY dataset ./dataset
 COPY scripts ./scripts
 COPY README.md ./
 
+# Ensure a writable models directory exists in the image (bind-mounted in docker-compose)
+RUN mkdir -p /app/models
+
 RUN pip install --no-cache-dir .
 
 RUN adduser --disabled-login --gecos "" mlsys && chown -R mlsys:mlsys /app
