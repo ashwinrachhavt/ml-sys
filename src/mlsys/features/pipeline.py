@@ -31,12 +31,16 @@ class FeaturePipeline:
         self.metadata: FeatureMetadata | None = None
 
     def add(self, transformer: FeatureTransformer) -> FeaturePipeline:
+        """Append a transformer to the pipeline."""
+
         self.transformers.append(transformer)
         return self
 
     def build(
         self, datasets: dict[str, pd.DataFrame], id_column: str, target_column: str
     ) -> tuple[pd.DataFrame, pd.Series]:
+        """Combine datasets, apply transformers, and return features/target."""
+
         base = self._combine_datasets(datasets, id_column=id_column, target_column=target_column)
         if target_column not in base.columns:
             raise ValueError(f"Target column '{target_column}' missing after combination")
@@ -103,46 +107,89 @@ class FeaturePipeline:
         )
 
     def _combine_datasets(self, datasets: dict[str, pd.DataFrame], id_column: str, target_column: str) -> pd.DataFrame:
-        customers = datasets.get("customers")
-        noncustomers = datasets.get("noncustomers")
-        usage = datasets.get("usage_actions")
+        """Compose the model matrix from the expected dataset inputs."""
 
+        base = self._load_base_dataset(datasets, target_column)
+        base = self._append_negative_samples(base, datasets.get("noncustomers"), target_column)
+        base = self._merge_usage_features(base, datasets.get("usage_actions"), id_column)
+        return self._fill_numeric_gaps(base)
+
+    def _load_base_dataset(self, datasets: dict[str, pd.DataFrame], target_column: str) -> pd.DataFrame:
+        """Return a copy of the mandatory customers dataset with target defaults."""
+
+        customers = datasets.get("customers")
         if customers is None:
             raise ValueError("'customers' dataset is mandatory")
 
         base = customers.copy()
         if target_column not in base.columns:
             base[target_column] = 1
-
-        if noncustomers is not None:
-            missing = set(base.columns) - set(noncustomers.columns)
-            for column in missing:
-                noncustomers[column] = None
-            noncustomers[target_column] = 0
-            base = pd.concat([base, noncustomers], ignore_index=True, sort=False)
-
-        if usage is not None and id_column in usage.columns:
-            usage_numeric = usage.select_dtypes(include=["number"]).groupby(id_column, as_index=False).sum()
-            base = base.merge(usage_numeric, on=id_column, how="left")
-
-        numeric_cols = base.select_dtypes(include=["number"]).columns
-        base[numeric_cols] = base[numeric_cols].fillna(0)
+        else:
+            base[target_column] = base[target_column].fillna(1)
         return base
 
+    def _append_negative_samples(
+        self, base: pd.DataFrame, noncustomers: pd.DataFrame | None, target_column: str
+    ) -> pd.DataFrame:
+        """Append non-customer records as negative training examples."""
+
+        if noncustomers is None:
+            return base
+
+        aligned = noncustomers.copy()
+        missing = set(base.columns) - set(aligned.columns)
+        for column in missing:
+            aligned[column] = None
+
+        aligned = aligned.reindex(columns=base.columns, fill_value=None)
+        aligned[target_column] = 0
+        combined = pd.concat([base, aligned], ignore_index=True, sort=False)
+        return combined
+
+    def _merge_usage_features(
+        self, base: pd.DataFrame, usage: pd.DataFrame | None, id_column: str
+    ) -> pd.DataFrame:
+        """Merge aggregated usage metrics into the base dataset."""
+
+        if usage is None or id_column not in usage.columns:
+            return base
+
+        numeric_columns = usage.select_dtypes(include=["number"]).columns.tolist()
+        if not numeric_columns:
+            return base
+
+        grouped = usage.loc[:, [id_column] + numeric_columns].groupby(id_column, as_index=False).sum()
+        return base.merge(grouped, on=id_column, how="left")
+
+    def _fill_numeric_gaps(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Ensure numeric columns have zero-filled missing values."""
+
+        result = df.copy()
+        numeric_cols = result.select_dtypes(include=["number"]).columns
+        if len(numeric_cols) > 0:
+            result.loc[:, numeric_cols] = result.loc[:, numeric_cols].fillna(0)
+        return result
+
     def _ensure_numeric(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Coerce object columns into numeric representations when possible."""
+
         result = df.copy()
         for column in list(result.columns):
-            if result[column].dtype == object:
-                coerced = pd.to_numeric(result[column], errors="coerce")
-                if coerced.notna().all():
-                    result[column] = coerced
-                else:
-                    datetime_series = pd.to_datetime(result[column], errors="coerce")
-                    if datetime_series.notna().any():
-                        reference = datetime_series.max()
-                        result[column] = (reference - datetime_series).dt.days.fillna(0).astype(int)
-                    else:
-                        result = result.drop(columns=[column])
+            if result[column].dtype != object:
+                continue
+
+            coerced = pd.to_numeric(result[column], errors="coerce")
+            if coerced.notna().all():
+                result[column] = coerced
+                continue
+
+            datetime_series = pd.to_datetime(result[column], errors="coerce")
+            if datetime_series.notna().any():
+                reference = datetime_series.max()
+                result[column] = (reference - datetime_series).dt.days.fillna(0).astype(int)
+                continue
+
+            result = result.drop(columns=[column])
         return result
 
 
