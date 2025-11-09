@@ -31,6 +31,7 @@ def _import_training_components() -> SimpleNamespace:
     from app.core.config import DEFAULT_CONFIG_PATH, load_config
     from app.data.dataframe_loader import DataFrameLoader
     from app.features.pipeline import FeaturePipeline
+    from app.ml.models.factory import build_model_specs
     from app.ml.trainer import ModelSpec, TrainingPipeline
 
     return SimpleNamespace(
@@ -40,34 +41,10 @@ def _import_training_components() -> SimpleNamespace:
         load_config=load_config,
         DataFrameLoader=DataFrameLoader,
         FeaturePipeline=FeaturePipeline,
+        build_model_specs=build_model_specs,
         ModelSpec=ModelSpec,
         TrainingPipeline=TrainingPipeline,
     )
-
-
-def _build_default_model_specs() -> list[ModelSpec]:
-    """Return a small collection of baseline models for tabular classification."""
-
-    components = _import_training_components()
-    model_spec_cls = components.ModelSpec
-    logistic_cls = components.LogisticRegression
-    random_forest_cls = components.RandomForestClassifier
-
-    return [
-        model_spec_cls(
-            name="logistic_regression",
-            estimator=logistic_cls(max_iter=1000, solver="liblinear"),
-            param_grid={"C": [0.1, 1.0, 10.0]},
-        ),
-        model_spec_cls(
-            name="random_forest",
-            estimator=random_forest_cls(n_estimators=300, random_state=42),
-            param_grid={
-                "max_depth": [None, 10, 20],
-                "min_samples_split": [2, 5],
-            },
-        ),
-    ]
 
 
 def parse_args(default_config: Path) -> argparse.Namespace:
@@ -83,6 +60,12 @@ def parse_args(default_config: Path) -> argparse.Namespace:
         action="store_true",
         help="Disable MLflow logging even if enabled in config",
     )
+    parser.add_argument(
+        "--models",
+        nargs="*",
+        default=["all"],
+        help="Subset of model names to train (default: all registered models)",
+    )
     return parser.parse_args()
 
 
@@ -92,6 +75,7 @@ def main() -> None:
     dataframe_loader_cls = components.DataFrameLoader
     feature_pipeline_cls = components.FeaturePipeline
     training_pipeline_cls = components.TrainingPipeline
+    build_model_specs = components.build_model_specs
 
     args = parse_args(components.DEFAULT_CONFIG_PATH)
 
@@ -100,7 +84,8 @@ def main() -> None:
 
     loader = dataframe_loader_cls()
     feature_pipeline = feature_pipeline_cls(cfg)
-    model_specs = _build_default_model_specs()
+    requested_models = None if "all" in args.models else args.models
+    model_specs = build_model_specs(cfg, requested_models)
 
     enable_mlflow = cfg.get("mlflow", {}).get("enabled", True) and not args.no_mlflow
 
@@ -118,6 +103,9 @@ def main() -> None:
     if result.best_threshold is not None:
         print(f"Best threshold: {result.best_threshold:.3f}")
     print(f"Feature count: {len(result.metadata.feature_names)}")
+    print("\nModel comparison (CV score)")
+    for comparison in result.comparisons:
+        print(f"  {comparison.name:<25} {comparison.cv_score:.4f}")
     for metric, value in sorted(result.metrics.items()):
         print(f"  {metric}: {value:.4f}")
 

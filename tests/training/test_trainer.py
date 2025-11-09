@@ -99,3 +99,5 @@ def test_training_pipeline_selects_best_model(trainer: TrainingPipeline) -> None
     assert "val_roc_auc" in result.metrics
     assert result.best_threshold is not None
     assert result.metadata.feature_names == result.feature_names
+    assert len(result.comparisons) == 2
+    assert result.comparisons[0].name in {"logistic_regression", "dummy"}
