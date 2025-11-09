@@ -1,42 +1,38 @@
-.PHONY: install lint test train evaluate api docker-build up down logs inference
+.PHONY: install lint format typecheck test train evaluate serve docker-build up down logs
 
 install:
-	uv sync
+	python -m pip install --upgrade pip
+	pip install .[dev]
 
 lint:
-	uv run ruff check .
+	ruff check src scripts
 
 format:
-	uv run ruff format .
+	ruff format src scripts
 
-mypy:
-	uv run mypy src
+typecheck:
+	mypy src
 
 test:
-	uv run pytest tests -q
+	pytest tests -q
 
 train:
-	uv run python scripts/train.py --models all
-
-train-no-mlflow:
-	uv run python scripts/train.py --models all --no-mlflow
+	python scripts/train.py
 
 evaluate:
-	uv run python scripts/evaluate.py
+	python scripts/evaluate.py
 
-api:
-	uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-
-inference: api
+serve:
+	python scripts/serve.py --host 0.0.0.0 --port 8000
 
 docker-build:
-	docker build -t mlsys-api:latest .
+	docker build -t mlsys-serve:latest -f docker/Dockerfile.serve .
 
 up:
-	docker compose up --build
+	docker compose -f docker/docker-compose.yml up --build
 
 down:
-	docker compose down
+	docker compose -f docker/docker-compose.yml down
 
 logs:
-	docker compose logs -f api
+	docker compose -f docker/docker-compose.yml logs -f api

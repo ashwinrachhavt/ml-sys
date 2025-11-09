@@ -5,15 +5,15 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: mlsys-api:latest
+    image: mlsys-serve:latest
     ports:
       - "8000:8000"
     environment:
-      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MLSYS_TRACKING__TRACKING_URI: http://mlflow:5000
     volumes:
       - ./config:/app/config:ro
       - ./dataset:/app/dataset:ro
-      - ./mlflow:/app/mlflow
+      - ./mlflow:/app/mlruns
     depends_on:
       - mlflow
 
@@ -34,17 +34,13 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: mlsys-api:latest
-    command: python scripts/train.py --models all
+    image: mlsys-train:latest
+    command: python scripts/train.py
     environment:
-      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MLSYS_TRACKING__TRACKING_URI: http://mlflow:5000
     volumes:
       - ./config:/app/config:ro
       - ./dataset:/app/dataset:ro
-      - ./mlflow:/app/mlflow
+      - ./mlflow:/app/mlruns
     depends_on:
       - mlflow
-
-volumes:
-  mlflow:
-    driver: local

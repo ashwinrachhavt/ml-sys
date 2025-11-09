@@ -1,0 +1,62 @@
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.serve
+    ports:
+      - "8000:8000"
+    environment:
+      MLSYS_TRACKING__TRACKING_URI: http://mlflow:5000
+    volumes:
+      - ../config:/app/config:ro
+      - ../dataset:/app/dataset:ro
+    depends_on:
+      - mlflow
+
+  trainer:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.train
+    environment:
+      MLSYS_TRACKING__TRACKING_URI: http://mlflow:5000
+    volumes:
+      - ../config:/app/config:ro
+      - ../dataset:/app/dataset:ro
+    depends_on:
+      - mlflow
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.9.2
+    command: >
+      mlflow server
+      --backend-store-uri sqlite:///mlruns/mlflow.db
+      --default-artifact-root /mlruns/artifacts
+      --host 0.0.0.0
+      --port 5000
+    ports:
+      - "5000:5000"
+    volumes:
+      - ../mlflow:/mlruns
+
+  prometheus:
+    image: prom/prometheus:v2.48.1
+    volumes:
+      - ../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - api
+
+  grafana:
+    image: grafana/grafana:10.2.3
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../monitoring/grafana:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+volumes:
+  mlruns: {}
