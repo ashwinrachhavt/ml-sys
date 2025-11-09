@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, cast
 
+import joblib
 import mlflow
 import mlflow.pyfunc
 import pandas as pd
@@ -43,6 +45,20 @@ class ModelLoader:
         return LoadedModel(
             model=model, signature=model.metadata.signature, input_example=model.metadata.saved_input_example_info
         )
+
+    def load_from_local(self, path: str | Path) -> LoadedModel:
+        path = Path(path)
+        if not path.exists():
+            raise FileNotFoundError(f"Model artifact not found at {path}")
+        artifact = joblib.load(path)
+        if not isinstance(artifact, dict) or "model" not in artifact:
+            raise ValueError("Local artifact must be a dictionary containing a 'model' key")
+        # Local artifacts are wrapped by PredictorService for API usage.
+        # For evaluate/CLI use, expose a simple predictor with a predict method.
+        from mlsys.serving.predictor import LocalArtifactPredictor
+
+        predictor = LocalArtifactPredictor(artifact)
+        return LoadedModel(model=predictor, signature=None, input_example=None)
 
 
 class PandasPredictor:

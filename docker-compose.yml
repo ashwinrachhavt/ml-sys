@@ -10,10 +10,13 @@ services:
       - "8000:8000"
     environment:
       MLSYS_TRACKING__TRACKING_URI: http://mlflow:5000
+      MLSYS_SERVING__LOCAL_MODEL_PATH: models/best.joblib
     volumes:
       - ./config:/app/config:ro
-      - ./dataset:/app/dataset:ro
+      # Provide dataset under project root for resolution
+      - ./config/dataset:/app/dataset:ro
       - ./mlflow:/app/mlruns
+      - ./models:/app/models
     depends_on:
       - mlflow
 
@@ -38,9 +41,26 @@ services:
     command: python scripts/train.py
     environment:
       MLSYS_TRACKING__TRACKING_URI: http://mlflow:5000
+      MLSYS_SERVING__LOCAL_MODEL_PATH: models/best.joblib
     volumes:
       - ./config:/app/config:ro
-      - ./dataset:/app/dataset:ro
+      - ./config/dataset:/app/dataset:ro
       - ./mlflow:/app/mlruns
+      - ./models:/app/models
+
+  evaluate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mlsys-evaluate:latest
+    command: python scripts/evaluate.py
+    environment:
+      MLSYS_TRACKING__TRACKING_URI: http://mlflow:5000
+      MLSYS_SERVING__LOCAL_MODEL_PATH: models/best.joblib
+    volumes:
+      - ./config:/app/config:ro
+      - ./config/dataset:/app/dataset:ro
+      - ./mlflow:/app/mlruns
+      - ./models:/app/models
     depends_on:
       - mlflow

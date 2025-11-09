@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import joblib
@@ -360,7 +361,11 @@ class Trainer:
         if not self.settings.serving.local_model_path or state.model is None:
             return
 
-        output_path = self.settings.resolve_path(self.settings.serving.local_model_path)
+        # Resolve artifact relative to the config file if available; this makes
+        # tests that pass a tmp config directory persist inside that tmp dir.
+        base = getattr(self.settings, "_config_path", None)
+        base = base.parent if base is not None else Path.cwd()
+        output_path = self.settings.resolve_path(self.settings.serving.local_model_path, relative_to=base)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         artifact = {
             "model": state.model,
@@ -370,6 +375,7 @@ class Trainer:
             "target_column": self.settings.data.target_column,
         }
         joblib.dump(artifact, output_path)
+        print(f"Saved best model artifact to {output_path}")
 
 
 __all__ = ["Trainer", "TrainingResult", "ModelComparison"]

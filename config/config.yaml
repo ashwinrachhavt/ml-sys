@@ -6,9 +6,9 @@ project:
 data:
   loader_type: csv
   sources:
-    customers: data/raw/customers.csv
-    noncustomers: data/raw/noncustomers.csv
-    usage_actions: data/raw/usage_actions.csv
+    customers: dataset/raw/customers.csv
+    noncustomers: dataset/raw/noncustomers.csv
+    usage_actions: dataset/raw/usage_actions.csv
   id_column: company_id
   target_column: is_customer
 
@@ -51,13 +51,13 @@ tracking:
   experiment_name: hubspot_conversion
   run_name_prefix: leadscore
   registry:
-    model_name: hubspot_conversion_model
+    model_name: hubspot_conversion
     stage: Production
 
 serving:
   host: 0.0.0.0
   port: 8000
-  model_name: hubspot_conversion_model
+  model_name: hubspot_conversion
   model_stage: Production
   enable_metrics: true
   workers: 1

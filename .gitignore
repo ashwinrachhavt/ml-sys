@@ -83,3 +83,9 @@ dataset
 catboost_info/
 
 mlflow
+config/models
+# Model artifacts and ML runs
+*.joblib
+models/
+mlflow/
+mlruns/

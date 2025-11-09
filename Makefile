@@ -1,29 +1,29 @@
 .PHONY: install lint format typecheck test train evaluate serve docker-build up down logs
 
 install:
-	python -m pip install --upgrade pip
-	pip install .[dev]
+	uv sync --all-extras --dev
+	uv pip install -e .
 
 lint:
-	ruff check src scripts
+	uv run ruff check src scripts
 
 format:
-	ruff format src scripts
+	uv run ruff format src scripts
 
 typecheck:
-	mypy src
+	uv run mypy src
 
 test:
-	pytest tests -q
+	uv run pytest tests -q
 
 train:
-	python scripts/train.py
+	uv run python scripts/train.py
 
 evaluate:
-	python scripts/evaluate.py
+	uv run python scripts/evaluate.py
 
 serve:
-	python scripts/serve.py --host 0.0.0.0 --port 8000
+	uv run python scripts/serve.py --host 0.0.0.0 --port 8000
 
 docker-build:
 	docker build -t mlsys-serve:latest -f docker/Dockerfile.serve .

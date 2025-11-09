@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import joblib
@@ -44,7 +45,13 @@ class LocalArtifactPredictor:
                     ordered[column] = df[column]
                 else:
                     ordered[column] = 0
-            df = pd.DataFrame(ordered)
+            # Ensure a single-row DataFrame when values are scalars
+            df = pd.DataFrame(
+                {
+                    k: ([v] if not hasattr(v, "__len__") or isinstance(v, (str, bytes)) else v)
+                    for k, v in ordered.items()
+                }
+            )
         return df
 
     def predict_batch(self, payload: list[dict[str, Any]] | pd.DataFrame) -> list[dict[str, Any]]:
@@ -68,6 +75,17 @@ class LocalArtifactPredictor:
     def predict_one(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self.predict_batch([payload])[0]
 
+    # Simple predict for evaluate/CLI usage
+    def predict(self, x: pd.DataFrame | dict[str, Any]) -> pd.Series:
+        if isinstance(x, dict):
+            batch = self.predict_batch([x])
+            # Normalise to Series of scores/labels
+            key = "score" if "score" in batch[0] else "label"
+            return pd.Series([row[key] for row in batch])
+        batch = self.predict_batch(x)
+        key = "score" if (batch and "score" in batch[0]) else "label"
+        return pd.Series([row[key] for row in batch], index=x.index)
+
 
 class PredictorService:
     """Load model artifacts and expose batch/online inference helpers."""
@@ -81,7 +99,8 @@ class PredictorService:
         local_path = self.settings.serving.local_model_path
         if not local_path:
             return None
-        path = self.settings.resolve_path(local_path)
+        # Resolve under project root to work with Docker bind mounts
+        path = self.settings.resolve_path(local_path, relative_to=Path.cwd())
         if not path.exists():
             return None
         artifact = joblib.load(path)

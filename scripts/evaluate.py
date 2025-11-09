@@ -60,7 +60,18 @@ def main() -> None:
     )
 
     loader = ModelLoader(tracking_uri=settings.tracking.tracking_uri)
-    if args.model_uri:
+    local_path: Path | None = None
+    if getattr(settings.serving, "local_model_path", None):
+        try:
+            # Resolve under project root so Docker bind mounts can be used
+            local_path = settings.resolve_path(settings.serving.local_model_path, relative_to=Path.cwd())  # type: ignore[attr-defined]
+        except Exception:
+            local_path = Path(settings.serving.local_model_path)
+
+    if local_path and local_path.exists():
+        print(f"Loading model from local path: {local_path}")
+        loaded = loader.load_from_local(local_path)
+    elif args.model_uri:
         loaded = loader.load_from_uri(args.model_uri)
     else:
         loaded = loader.load_from_registry(settings.serving.model_name, settings.serving.model_stage)
