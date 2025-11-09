@@ -1,0 +1,26 @@
+name: Docker
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'docker/**'
+      - 'Dockerfile'
+      - 'docker-compose.yml'
+
+jobs:
+  build-train:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build training image
+        run: docker build -f docker/Dockerfile.train -t mlsys-train:latest .
+
+  build-serve:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build serving image
+        run: docker build -f docker/Dockerfile.serve -t mlsys-serve:latest .

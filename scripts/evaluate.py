@@ -1,97 +1,94 @@
 #!/usr/bin/env python3
+"""Evaluate a production model against the holdout set."""
+
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
-from types import SimpleNamespace
 
-ROOT = Path(__file__).resolve().parents[1]
-SRC_PATH = ROOT / "src"
-if str(SRC_PATH) not in sys.path:
-    sys.path.insert(0, str(SRC_PATH))
+import numpy as np
+import pandas as pd
 
+from mlsys.config import Settings
+from mlsys.data import DatasetLoader
+from mlsys.evaluation import Evaluator
+from mlsys.features import FeaturePipeline, TransformerRegistry
+from mlsys.serving import ModelLoader
 
-def _load_components() -> SimpleNamespace:
-    from app.core.config import DEFAULT_CONFIG_PATH, load_config
-    from app.data.dataframe_loader import DataFrameLoader
-    from app.features.pipeline import FeaturePipeline
-    from app.ml.evaluation import classification_metrics
-    from app.serving.predictor import ModelPredictor
-
-    return SimpleNamespace(
-        DEFAULT_CONFIG_PATH=DEFAULT_CONFIG_PATH,
-        load_config=load_config,
-        DataFrameLoader=DataFrameLoader,
-        FeaturePipeline=FeaturePipeline,
-        classification_metrics=classification_metrics,
-        ModelPredictor=ModelPredictor,
-    )
+DEFAULT_CONFIG = Path("config/config.yaml")
 
 
-def parse_args(default_config: Path) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Evaluate the production model on the hold-out test split")
-    parser.add_argument(
-        "--config",
-        type=Path,
-        default=default_config,
-        help="Path to configuration file",
-    )
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Evaluate the production model")
+    parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
+    parser.add_argument("--model-uri", type=str, default=None, help="Optional explicit MLflow model URI")
     return parser.parse_args()
 
 
+def build_pipeline(settings: Settings) -> FeaturePipeline:
+    transformers = [
+        TransformerRegistry.create(
+            cfg.type,
+            **{k: v for k, v in cfg.model_dump(exclude={"type"}).items() if v is not None},
+        )
+        for cfg in settings.features.transformers
+    ]
+    return FeaturePipeline(transformers=transformers)
+
+
 def main() -> None:
-    components = _load_components()
-    args = parse_args(components.DEFAULT_CONFIG_PATH)
+    args = parse_args()
+    settings = Settings.from_yaml(args.config)
 
-    load_config = components.load_config
-    data_loader_cls = components.DataFrameLoader
-    feature_pipeline_cls = components.FeaturePipeline
-    classification_metrics = components.classification_metrics
-    predictor_cls = components.ModelPredictor
+    _, datasets = DatasetLoader.from_config(
+        loader_type=settings.data.loader_type,
+        sources=settings.data_paths(),
+    )
 
-    config_path = args.config.resolve()
-    cfg = load_config(config_path)
+    pipeline = build_pipeline(settings)
+    features, target = pipeline.build(datasets, settings.data.id_column, settings.data.target_column)
+    splits = pipeline.split(
+        features,
+        target,
+        test_size=settings.training.test_size,
+        val_size=settings.training.val_size,
+        random_state=settings.training.random_state,
+        stratify=settings.training.stratify,
+        categorical_features=[],
+        datetime_columns=[],
+        reference_date=None,
+    )
 
-    loader = data_loader_cls()
-    datasets = loader.load(config=cfg, config_path=config_path)
-    pipeline = feature_pipeline_cls(cfg)
-    matrix = pipeline.build_feature_matrix(datasets)
-
-    predictor = predictor_cls(config_path=config_path)
-    model = predictor.model
-    if model is None:
-        print("No production model is registered yet. Train and register a model before running evaluation.")
-        return
-
-    x_test = matrix.x_test
-    y_test = matrix.y_test
-
-    if hasattr(model, "predict_proba"):
-        proba = model.predict_proba(x_test)[:, 1]
+    loader = ModelLoader(tracking_uri=settings.tracking.tracking_uri)
+    if args.model_uri:
+        loaded = loader.load_from_uri(args.model_uri)
     else:
-        proba = None
-    preds = model.predict(x_test)
+        loaded = loader.load_from_registry(settings.serving.model_name, settings.serving.model_stage)
 
-    metrics = classification_metrics(y_test.values, preds, proba)
-    threshold = predictor.best_threshold or cfg.get("evaluation", {}).get("classification_threshold", 0.5)
-    tuned_metrics = metrics
-    if proba is not None:
-        tuned_preds = (proba >= threshold).astype(int)
-        tuned_metrics = classification_metrics(y_test.values, tuned_preds, proba)
+    predictor = loaded.model
+    predictions = predictor.predict(splits.x_test)
 
-    print("Evaluation against test set")
-    print(f"Model version: {predictor.model_version}")
-    print(f"Threshold: {threshold:.3f}")
-    print("")
-    for key, value in metrics.items():
-        print(f"  base_{key}: {value:.4f}")
+    if isinstance(predictions, pd.DataFrame):
+        if predictions.shape[1] == 1:
+            scores = predictions.iloc[:, 0].to_numpy()
+        elif "score" in predictions.columns:
+            scores = predictions["score"].to_numpy()
+        elif "probability" in predictions.columns:
+            scores = predictions["probability"].to_numpy()
+        else:
+            scores = predictions.iloc[:, -1].to_numpy()
+    elif isinstance(predictions, pd.Series):
+        scores = predictions.to_numpy()
+    else:
+        scores = np.asarray(predictions)
 
-    if proba is not None:
-        print("")
-        for key, value in tuned_metrics.items():
-            print(f"  tuned_{key}: {value:.4f}")
+    evaluator = Evaluator(settings.evaluation.metrics, settings.evaluation.threshold_metric)
+    result = evaluator.evaluate(splits.y_test, scores)
+
+    print("Evaluation metrics:")
+    for name, value in sorted(result.metrics.items()):
+        print(f"  {name}: {value:.4f}")
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover - CLI entrypoint
     main()
