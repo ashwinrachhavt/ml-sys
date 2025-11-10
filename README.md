@@ -1,87 +1,190 @@
 # HubSpot Prospect ML Framework
 
-A fast, reproducible template for building, evaluating, and serving prospect conversion models. The project packages data loading, feature engineering, experiment tracking, and a FastAPI inference surface so that data scientists can iterate on tabular problems without rebuilding infrastructure from scratch.
+A small, opinionated template for building, evaluating, and serving **prospect conversion models**.
 
-## Why this framework
+It’s meant to answer a simple question:
 
-- **Config driven runs** – `mlsys.config.Settings` loads a single YAML file, validates it, and propagates settings into data loaders, feature transformers, model search, and serving defaults. Environment variables prefixed with `MLSYS_` override any value, making experiments reproducible and repeatable. 【F:src/mlsys/config/settings.py†L67-L113】
-- **Extensible registries** – Data loaders, feature transformers, and models plug into registries. Adding a Snowflake loader or a CatBoost wrapper is a two-line change registered next to the existing CSV loader, categorical encoder, and scikit-learn models. 【F:src/mlsys/data/registry.py†L11-L58】【F:src/mlsys/features/transformer.py†L19-L87】【F:src/mlsys/models/registry.py†L10-L60】
-- **One orchestration path** – `Trainer` wires together dataset ingestion, feature pipeline, cross-validated model selection, evaluation, callback hooks, and artifact creation. The CLI, tests, and API all reuse the same entrypoint. 【F:src/mlsys/training/trainer.py†L35-L136】
-- **Deployment ready** – `PredictorService` loads either a local joblib bundle or an MLflow registered model and exposes predict-one/batch helpers consumed by FastAPI routes. Prometheus middleware and Docker assets are ready for production hardening. 【F:src/mlsys/serving/predictor.py†L16-L86】【F:scripts/serve.py†L4-L33】【F:docker/docker-compose.yml†L1-L64】
-- **Tooling included** – `pyproject.toml` defines runtime and dev dependencies, Ruff, mypy, and pytest configuration. The `Makefile` wraps common tasks, and `.github/workflows/ci.yml` runs lint + tests on every push. 【F:pyproject.toml†L1-L89】【F:Makefile†L1-L27】【F:.github/workflows/ci.yml†L1-L41】
+> “If I want to spin up a new tabular ML project for sales/marketing, how fast can I get from raw tables → features → experiments → API without rebuilding the same plumbing again?”
+
+This repo gives you:
+
+* A **config-driven workflow** so you can rerun experiments reliably.
+* **Registries** for data loaders, feature transformers, and models, so adding new bits is trivial.
+* A single **Trainer** that wires everything together.
+* A **FastAPI** surface to serve the best model in production.
+* CI, Docker, and monitoring stubs so it’s not just a notebook that “works on my machine.”
+
+---
+
+## Why this exists
+
+### 1. Config-driven runs
+
+All project behavior comes from a single YAML file: `config/config.yaml`.
+
+`mlsys.config.Settings`:
+
+* Loads this YAML.
+* Validates it with Pydantic + `config/config.schema.json`.
+* Exposes typed settings to data loaders, feature transformers, model selection, and serving defaults.
+
+Every key can be overridden with an env var:
+
+```bash
+MLSYS_TRAINING__TEST_SIZE=0.25
+MLSYS_SERVING__PORT=9000
+```
+
+…which makes experiments **reproducible** and **easy to share**: “Here’s the config and env overrides I used; you can rerun the same thing.”
+
+See: `src/mlsys/config/settings.py`
+
+---
+
+### 2. Extensible registries
+
+Most ML work is plugging in new sources / models without breaking everything else.
+
+So:
+
+* **Data loaders** live behind a registry (`csv`, `parquet`, `snowflake`, etc.).
+* **Feature transformers** (fillna, categorical encoders, datetime features, aggregations) are also registered.
+* **Models** (e.g., logistic regression, random forest, etc.) plug into a model registry.
+
+Adding a new thing is intentionally boring:
+
+* Create a small wrapper class.
+* Register it next to the existing ones.
+
+Example changes:
+
+* New loader: add a `SnowflakeLoader` and register it in `src/mlsys/data/registry.py`.
+* New model: wrap CatBoost or XGBoost and register it in `src/mlsys/models/registry.py`.
+* New transformer: define it and add to `src/mlsys/features/transformer.py`.
+
+---
+
+### 3. One orchestration path
+
+The **Trainer** is the main “brain”:
+
+* Loads datasets via the configured loader.
+* Builds the feature pipeline from the transformer list.
+* Splits data into train/val/test.
+* Runs cross-validated model selection over all configured models and param grids.
+* Tracks metrics via the configured tracker (MLflow, W&B, or none).
+* Saves the best model artifact + a leaderboard.
+
+The CLI, tests, and API all run through this same path, so there isn’t a separate “throwaway script” vs “real pipeline.”
+
+See: `src/mlsys/training/trainer.py`
+
+---
+
+### 4. Deployment-ready serving
+
+`PredictorService` is the serving side of the same story:
+
+* Can load:
+
+  * A **local joblib bundle** (e.g., `models/best.joblib`), or
+  * A model from **MLflow registry** (by name + stage).
+* Exposes helpers for:
+
+  * Predicting **one** prospect.
+  * Predicting **batches** (e.g., CSV, list of dicts).
+
+FastAPI routes call into this predictor and are wired in `src/mlsys/api/`.
+
+Out of the box you get:
+
+* OpenAPI docs at `/docs`.
+* Prometheus middleware hooks for metrics.
+* Docker assets to containerize the API.
+
+Files to look at:
+
+* `src/mlsys/serving/predictor.py`
+* `scripts/serve.py`
+* `docker/docker-compose.yml`
+
+---
+
+### 5. Tooling included
+
+The repo ships with a “batteries included” setup:
+
+* `pyproject.toml` — runtime + dev deps, plus config for:
+
+  * `ruff` (lint)
+  * `mypy` (types)
+  * `pytest` (tests)
+* `Makefile` — wraps common workflows (`install`, `train`, `serve`, etc.).
+* `.github/workflows/ci.yml` — runs lint + tests on every push.
+
+---
 
 ## Repository layout
 
-```
+```text
 ml-sys/
-├── README.md                  # you are here
-├── config/config.yaml         # default project configuration
-├── config/config.schema.json  # JSON schema describing valid config keys
-├── scripts/                   # CLI entrypoints (train/evaluate/serve)
+├── README.md                  # this file
+├── config/
+│   ├── config.yaml            # main project config
+│   └── config.schema.json     # JSON schema for validation
+├── scripts/                   # train/evaluate/serve entrypoints
 ├── src/mlsys/                 # installable Python package
-│   ├── api/                   # FastAPI app and routes
+│   ├── api/                   # FastAPI app + routes
 │   ├── data/                  # loaders + registry abstraction
 │   ├── features/              # feature transformers + pipeline
-│   ├── models/                # model registry and wrappers
-│   ├── training/              # trainer, callbacks, evaluation helpers
+│   ├── models/                # model registry + wrappers
+│   ├── training/              # trainer, callbacks, eval helpers
 │   ├── serving/               # model loader + predictor service
-│   └── tracking/              # MLflow-backed experiment tracker
-├── tests/                     # unit + integration coverage
-├── docker/                    # docker-compose + service Dockerfile
+│   └── tracking/              # MLflow (and other) trackers
+├── tests/                     # unit + integration tests
+├── docker/                    # Dockerfile + docker-compose
 └── monitoring/                # Prometheus + Grafana stubs
 ```
 
+---
+
 ## Quick start
 
-1. **Set up a Python environment**
-   ```bash
-   make install  # installs mlsys with dev extras inside the active virtualenv
-   ```
+### 1. Set up the environment
 
-2. **Create datasets**
-   Place CSV, Parquet, or JSON tables for `customers`, `noncustomers`, and `usage_actions` under a `data/` directory (see the configuration section for exact expectations).
+Inside your virtualenv:
 
-3. **Review configuration**
-   Edit `config/config.yaml` (sample below) to point to your data files, tune feature transformers, and pick the models you want to evaluate.
+```bash
+make install
+```
 
-4. **Train models**
-   ```bash
-   make train               # runs scripts/train.py using config/config.yaml
-   make train NO_TRACKING=1 # disable MLflow tracking if needed
-   ```
-   The training script prints a leaderboard, persists the best artifact, and, if MLflow is enabled, logs metrics + parameters.
+This installs `mlsys` in editable mode with dev extras.
 
-5. **Evaluate or inspect artifacts**
-   ```bash
-   make evaluate
-   ```
-   The evaluator compares hold-out metrics and can be extended to compute business KPIs.
+---
 
-6. **Launch the API**
-   ```bash
-   make serve
-   ```
-   Visit `http://localhost:8000/docs` for interactive Swagger documentation. Predictions hit the same artifact used during training via `PredictorService`.
+### 2. Prepare datasets
 
-7. **Quality gates**
-   ```bash
-   make lint      # Ruff
-   make typecheck # mypy
-   make test      # pytest
-   ```
+Drop your raw tables under `data/`:
 
-8. **Container + monitoring (optional)**
-   ```bash
-   make docker-build
-   make up        # docker-compose with API + MLflow + Prometheus/Grafana
-   ```
-   Tear everything down with `make down` and tail logs using `make logs`.
+* `customers` — current HubSpot customers.
+* `noncustomers` — prospects that never converted.
+* `usage_actions` — product usage / event data (optional but useful).
 
-## Configuration guide
+CSV, Parquet, or JSON are supported, depending on the loader you pick in config.
 
-Configuration is centralized in `config/config.yaml` and validated by both Pydantic (`Settings`) and `config/config.schema.json`. Environment variables prefixed with `MLSYS_` (e.g. `MLSYS_TRAINING__TEST_SIZE=0.25`) override any value at runtime.
+---
 
-### Sample
+### 3. Configure the project
+
+Edit `config/config.yaml` to:
+
+* Point to the correct file paths.
+* Set the ID + target columns.
+* Choose feature transformers.
+* Enable models and parameter grids.
+* Configure experiment tracking and serving.
+
+Sample config:
 
 ```yaml
 project:
@@ -142,39 +245,246 @@ serving:
   local_model_path: models/best.joblib
 ```
 
-### Key sections
+Notes:
 
-- **project** – human readable metadata (used in logs, MLflow tags, and presentations).
-- **data** – loader type and a map of dataset names to file paths. Dataset names `customers`, `noncustomers`, and `usage_actions` receive special handling inside `FeaturePipeline`. 【F:src/mlsys/features/pipeline.py†L36-L80】
-- **features.transformers** – ordered list of feature transformers applied prior to splitting. Built-in options include `fillna`, `categorical`, `datetime`, and `aggregation`; extend the registry to add custom feature builders. 【F:src/mlsys/features/transformer.py†L68-L163】
-- **training** – split sizes, random seed, and enabled models. `Trainer` performs a parameter grid search for each enabled model using stratified K-fold cross-validation, tracks metrics via the configured tracker, and records leaderboard comparisons. 【F:src/mlsys/training/trainer.py†L70-L135】
-- **tracking** – choose `mlflow`, `wandb`, or `none`. The MLflow tracker also handles optional registry pushes to a named model and target stage. 【F:src/mlsys/tracking/mlflow_tracker.py†L14-L71】
-- **serving** – network config and artifact lookup. Point `local_model_path` at a joblib bundle for offline serving, or leave it empty to always resolve the latest model from the tracker’s registry. 【F:src/mlsys/serving/predictor.py†L36-L86】
+* The `features.transformers` list is applied **in order**.
+* `training.models` defines which models to try and their param grids.
+* `tracking` lets you pick `mlflow`, `wandb`, or `none`.
+* `serving.local_model_path` can be empty if you always want to fetch from MLflow.
 
-## Presenting the project
+---
 
-- Start with the **problem framing**: prioritizing sales outreach requires rapid experimentation and trustworthy deployment. Use the config-driven workflow to show how analysts can tweak features and models without code changes.
-- Walk through the **training lifecycle** using `scripts/train.py` and the evaluation summary printed to the console. Highlight how callbacks or experiment trackers can hook into the same flow for W&B dashboards or Slack alerts.
-- Demo the **API** via `make serve`, cURL a `/predict` request, and mention how the same predictor can batch-score CSVs.
-- Close with the **backlog** in `docs/improvement-plan.md` to show you already identified hardening opportunities (e.g., leakage guards, better artifact metadata, serving error handling).
+### 4. Train models
 
-For a longer presentation outline and suggested narrative beats, check `docs/presentation-script.md`.
+```bash
+make train               # uses config/config.yaml
+make train NO_TRACKING=1 # same, but without MLflow
+```
+
+The training script:
+
+* Builds and runs the full pipeline.
+* Prints a **leaderboard** of models + metrics.
+* Persists the **best artifact**.
+* If tracking is enabled, logs metrics/params/artifacts to MLflow.
+
+---
+
+### 5. Evaluate
+
+```bash
+make evaluate
+```
+
+The evaluator:
+
+* Loads the held-out set.
+* Computes metrics for the best model.
+* Is set up so you can easily extend it to add **business KPIs** (e.g., lift in conversion for top-N scored leads).
+
+---
+
+### 6. Serve the model
+
+```bash
+make serve
+```
+
+Then open:
+
+* `http://localhost:8000/docs` — interactive Swagger UI.
+* Try a `POST /predict` with a single prospect or a small batch.
+
+The API uses the same `PredictorService` that batch jobs can use to score CSVs.
+
+---
+
+### 7. Quality gates
+
+```bash
+make lint      # Ruff
+make typecheck # mypy
+make test      # pytest
+```
+
+---
+
+### 8. Containers & monitoring (optional)
+
+```bash
+make docker-build
+make up           # docker-compose up with API + MLflow + Prometheus/Grafana
+make logs         # tail service logs
+make down         # tear everything down
+```
+
+`monitoring/` has starter configs for Prometheus + Grafana, so you can track latency, error rates, and QPS once this is running in a real environment.
+
+---
+
+## Configuration cheat sheet
+
+* **project**
+  Human-readable metadata. Shows up in logs, MLflow tags, and slide decks.
+
+* **data**
+
+  * `loader_type`: which loader to use (`csv`, etc.).
+  * `sources`: map of dataset names → file paths.
+  * Special names like `customers`, `noncustomers`, and `usage_actions` get special handling in `FeaturePipeline`.
+
+* **features.transformers**
+  Ordered list of feature transformers, e.g.:
+
+  * `fillna` — missing value handling.
+  * `categorical` — encodings (one-hot, etc.).
+  * `datetime` — extract time-based features given a reference date.
+  * `aggregation` — rollups over usage actions.
+
+  You can extend this by adding your own transformer and registering it.
+
+* **training**
+
+  * `test_size`, `val_size`, `random_state`.
+  * `models`: which algorithms to run and their param grids.
+
+  Under the hood, the Trainer uses stratified K-fold CV, tracks metrics with the configured tracker, and stores leaderboard comparisons.
+
+* **tracking**
+
+  * `backend`: `mlflow`, `wandb`, or `none`.
+  * `tracking_uri`, `experiment_name`, `run_name_prefix`.
+  * Optional registry settings for model name + stage.
+
+* **serving**
+
+  * Host/port for FastAPI.
+  * Model name + stage for registry-based serving.
+  * `local_model_path` for offline scenarios.
+
+---
+
+## How to present this in an interview
+
+Rough storyline:
+
+1. **Start with the problem.**
+   Sales teams need good **lead scoring / prospect models**, but:
+
+   * Data scientists shouldn’t rebuild infra every time.
+   * You want fast iteration + safe deployment.
+
+2. **Show the workflow.**
+
+   * Point to `config/config.yaml`.
+   * Show how an analyst can change:
+
+     * Which features are enabled.
+     * Which models / grids are tried.
+     * Splits and seeds.
+   * No code changes, just config.
+
+3. **Walk through training.**
+
+   * Run `make train`.
+   * Highlight:
+
+     * Dataset loading.
+     * Feature pipeline.
+     * Model search.
+     * Leaderboard + artifact.
+
+4. **Demo serving.**
+
+   * Run `make serve`.
+   * Open `/docs`.
+   * Send a fake prospect through `/predict`.
+   * Explain how the same `PredictorService` can do batch scoring.
+
+5. **Close with future work.**
+
+   * Mention leakage checks, better feature stores, drift monitoring, richer model metadata, etc.
+   * Point at `docs/improvement-plan.md` (if present) to show you’ve already thought about it.
+
+---
 
 ## Getting unstuck
 
-- Validate YAML with `python -m jsonschema -i config/config.yaml config/config.schema.json`.
-- List available transformers or models using the registries:
+A few tips if you’re poking around:
+
+* Validate config:
+
+  ```bash
+  python -m jsonschema -i config/config.yaml config/config.schema.json
+  ```
+
+* See what transformers/models exist:
+
   ```python
   from mlsys.features import TransformerRegistry
   from mlsys.models import ModelRegistry
+
   print(TransformerRegistry.list())
   print(ModelRegistry.list())
   ```
-- Use the unit tests in `tests/` as working examples of the public APIs.
 
-## Additional references
+* Use `tests/` as examples of the public APIs.
 
-- `notebooks/` contains exploratory notebooks that mirror the production pipeline for storytelling during the presentation.
-- `monitoring/` seeds Prometheus + Grafana dashboards for latency/error metrics once the API is containerized.
-- `docs/` (added in this commit) includes a speaking script and prioritized improvement plan to guide interviews and follow-up work.
+* `notebooks/` mirror the production pipeline for exploratory work / storytelling.
 
+---
+
+## Mermaid diagram
+
+Here’s a high-level view of the offline (training) and online (serving) flow:
+
+```mermaid
+flowchart LR
+  subgraph Config["Config & Settings"]
+    Y[config/config.yaml]
+    S[Settings (Pydantic)]
+    Y --> S
+  end
+
+  subgraph Data["Data & Features"]
+    DL[DataLoader Registry\n(csv/parquet/snowflake...)]
+    FP[FeaturePipeline\n(transformers: fillna, categorical, datetime, agg...)]
+    S --> DL
+    DL --> FP
+  end
+
+  subgraph Train["Offline: Train & Evaluate"]
+    T[Trainer\nCV, grid search, leaderboard]
+    TRK[Tracker\n(MLflow/W&B/none)]
+    ART[Best Model Artifact\n(joblib + metadata)]
+    FP --> T
+    S --> T
+    T --> TRK
+    T --> ART
+  end
+
+  subgraph Registry["Model Registry"]
+    MR[MLflow Model Registry\n(name + stage)]
+  end
+
+  ART --> MR
+
+  subgraph Serve["Online: Serve Predictions"]
+    PS[PredictorService\n(load from joblib or registry)]
+    API[FastAPI /predict\n(single + batch)]
+    PS --> API
+  end
+
+  MR --> PS
+  ART --> PS
+
+  subgraph Clients["Clients"]
+    CLI[Internal tools / notebooks]
+    BATCH[Batch jobs\n(CSV scoring)]
+    APP[Product surfaces\n(HubSpot UI, etc.)]
+  end
+
+  API --> CLI
+  API --> BATCH
+  API --> APP
+```
