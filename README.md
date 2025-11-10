@@ -439,52 +439,83 @@ A few tips if you’re poking around:
 Here’s a high-level view of the offline (training) and online (serving) flow:
 
 ```mermaid
-flowchart LR
-  subgraph Config["Config & Settings"]
-    Y[config/config.yaml]
-    S[Settings (Pydantic)]
-    Y --> S
+flowchart TB
+
+  %% CONFIGURATION
+  subgraph Config
+    cfg_yaml[config.yaml file]
+    cfg_settings[Settings module]
+    cfg_yaml --> cfg_settings
   end
 
-  subgraph Data["Data & Features"]
-    DL[DataLoader Registry\n(csv/parquet/snowflake...)]
-    FP[FeaturePipeline\n(transformers: fillna, categorical, datetime, agg...)]
-    S --> DL
-    DL --> FP
+  %% DATA LAYER
+  subgraph Data_layer
+    data_registry[Data loader registry]
+    data_loaders[Concrete data loaders]
+    data_registry --> data_loaders
   end
 
-  subgraph Train["Offline: Train & Evaluate"]
-    T[Trainer\nCV, grid search, leaderboard]
-    TRK[Tracker\n(MLflow/W&B/none)]
-    ART[Best Model Artifact\n(joblib + metadata)]
-    FP --> T
-    S --> T
-    T --> TRK
-    T --> ART
+  %% FEATURE LAYER
+  subgraph Feature_layer
+    feat_registry[Transformer registry]
+    feat_pipeline[Feature pipeline]
+    feat_registry --> feat_pipeline
   end
 
-  subgraph Registry["Model Registry"]
-    MR[MLflow Model Registry\n(name + stage)]
+  %% TRAINING AND EVALUATION
+  subgraph Training_layer
+    trainer[Trainer]
+    evaluator[Evaluation and leaderboard]
+    trainer --> evaluator
   end
 
-  ART --> MR
-
-  subgraph Serve["Online: Serve Predictions"]
-    PS[PredictorService\n(load from joblib or registry)]
-    API[FastAPI /predict\n(single + batch)]
-    PS --> API
+  %% TRACKING AND REGISTRY
+  subgraph Tracking_layer
+    tracker[Experiment tracker]
+    model_registry[Model registry]
+    tracker --> model_registry
   end
 
-  MR --> PS
-  ART --> PS
-
-  subgraph Clients["Clients"]
-    CLI[Internal tools / notebooks]
-    BATCH[Batch jobs\n(CSV scoring)]
-    APP[Product surfaces\n(HubSpot UI, etc.)]
+  %% ARTIFACTS
+  subgraph Artifacts
+    artifact[Best model artifact]
   end
 
-  API --> CLI
-  API --> BATCH
-  API --> APP
+  %% SERVING
+  subgraph Serving_layer
+    predictor[Predictor service]
+    api[FastAPI application]
+    predictor --> api
+  end
+
+  %% MONITORING AND INFRA
+  subgraph Monitoring_and_infra
+    prometheus[Prometheus metrics]
+    grafana[Grafana dashboards]
+    ci[CI workflow]
+    docker[Docker and compose]
+    prometheus --> grafana
+    ci --> docker
+  end
+
+  %% WIRES BETWEEN LAYERS
+  cfg_settings --> data_registry
+  data_loaders --> feat_pipeline
+  feat_pipeline --> trainer
+  cfg_settings --> trainer
+  trainer --> tracker
+  trainer --> artifact
+  artifact --> model_registry
+  artifact --> predictor
+  model_registry --> predictor
+  api --> prometheus
+
+  %% ENTRYPOINTS AND CLIENTS
+  cli[CLI scripts train evaluate serve]
+  clients[Client apps and batch jobs]
+
+  cli --> trainer
+  cli --> api
+  clients --> api
+
 ```
