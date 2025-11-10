@@ -1,10 +1,8 @@
 # HubSpot Prospect ML Framework
 
-A small, opinionated template for building, evaluating, and serving **prospect conversion models**.
+A small template for building, evaluating, and serving **prospect conversion models**.
 
-It’s meant to answer a simple question:
-
-> “If I want to spin up a new tabular ML project for sales/marketing, how fast can I get from raw tables → features → experiments → API without rebuilding the same plumbing again?”
+![MLsys Architecture](docs/mlsys.png)
 
 This repo gives you:
 
@@ -437,7 +435,7 @@ A few tips if you’re poking around:
 ## Mermaid diagram
 
 Here’s a high-level view of the offline (training) and online (serving) flow:
-
+![MLsys Architecture](docs/mlsys.png)
 ```mermaid
 flowchart TB
 
